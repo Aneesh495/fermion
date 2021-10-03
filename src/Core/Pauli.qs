@@ -96,6 +96,65 @@ namespace Fermion.Core {
         }
     }
 
+    // Controlled multi-qubit Pauli exponential evolution:
+    // Controls the central Rz rotation using the control qubit
+    operation ControlledExpPauliWord(
+        control : Qubit,
+        theta : Double,
+        word : PauliWord,
+        register : Qubit[]
+    ) : Unit {
+        let numOps = Length(word.Ops);
+        if (numOps == 0) {
+            return ();
+        }
+
+        mutable activeQubits = [];
+        mutable activeOps = [];
+        for idx in 0..numOps - 1 {
+            if (word.Ops[idx] != PauliI) {
+                set activeQubits += [word.Qubits[idx]];
+                set activeOps += [word.Ops[idx]];
+            }
+        }
+
+        let numActive = Length(activeQubits);
+        if (numActive == 0) {
+            // Identity operator with phase theta/2: applies R1(-theta, control)
+            R1(-theta * 0.5, control);
+            return ();
+        }
+
+        if (numActive == 1) {
+            let q = register[activeQubits[0]];
+            let p = activeOps[0];
+            RotateFromZBasis(p, q);
+            Controlled Rz([control], (theta, q));
+            Adjoint RotateFromZBasis(p, q);
+            return ();
+        }
+
+        // Multi-qubit controlled evolution
+        for idx in 0..numActive - 1 {
+            RotateFromZBasis(activeOps[idx], register[activeQubits[idx]]);
+        }
+
+        for idx in 0..numActive - 2 {
+            CNOT(register[activeQubits[idx]], register[activeQubits[idx + 1]]);
+        }
+
+        let accumulator = register[activeQubits[numActive - 1]];
+        Controlled Rz([control], (theta, accumulator));
+
+        for idx in numActive - 2..-1..0 {
+            CNOT(register[activeQubits[idx]], register[activeQubits[idx + 1]]);
+        }
+
+        for idx in 0..numActive - 1 {
+            Adjoint RotateFromZBasis(activeOps[idx], register[activeQubits[idx]]);
+        }
+    }
+
     // Adjoint of ExpPauliWord: exp(i * theta * P / 2) = exp(-i * (-theta) * P / 2)
     operation AdjExpPauliWord(theta : Double, word : PauliWord, register : Qubit[]) : Unit {
         ExpPauliWord(-theta, word, register);
