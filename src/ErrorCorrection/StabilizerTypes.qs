@@ -9,7 +9,7 @@ namespace Fermion.ErrorCorrection {
     struct CheckMatrix {
         NumDataQubits : Int,
         NumChecks : Int,
-        XChecks : Bool[][], // size: NumChecks x NumDataQubits
+        XChecks : Bool[][],
         ZChecks : Bool[][]
     }
 
@@ -46,6 +46,7 @@ namespace Fermion.ErrorCorrection {
     }
 
     // Extracts the syndrome bit of a single stabilizer check generator onto an ancilla qubit
+    // Using phase kickback with ancilla initialized in |+>
     operation ExtractSingleCheckSyndrome(
         check : StabilizerCheck,
         dataRegister : Qubit[],
@@ -55,11 +56,11 @@ namespace Fermion.ErrorCorrection {
         for qIdx in check.Support {
             let dataQubit = dataRegister[qIdx];
             if (check.CheckType == PauliX) {
-                // Ancilla controls X on data: CNOT(ancilla, data)
+                // Ancilla controls X on data: detects Z errors on data
                 CNOT(ancilla, dataQubit);
             } elif (check.CheckType == PauliZ) {
-                // Data controls X on ancilla: CNOT(data, ancilla)
-                CNOT(dataQubit, ancilla);
+                // Ancilla controls Z on data: detects X errors on data
+                CZ(ancilla, dataQubit);
             }
         }
         H(ancilla);
