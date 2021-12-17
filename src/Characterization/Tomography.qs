@@ -21,35 +21,39 @@ namespace Fermion.Characterization {
     }
 
     // Measures the Stokes parameters (S1=<X>, S2=<Y>, S3=<Z>) of a single-qubit state
-    // prepared by the given state preparation operation
+    // prepared by the given state preparation operation using multi-shot sampling
     operation PerformSingleQubitTomography(
         prepareState : (Qubit) => Unit,
         shots : Int
     ) : StokesParameters {
+        mutable countX = 0;
+        mutable countY = 0;
+        mutable countZ = 0;
+
         use q = Qubit();
+        for _ in 1..shots {
+            // Measure X
+            prepareState(q);
+            H(q);
+            if (M(q) == Zero) { set countX += 1; }
+            Reset(q);
 
-        // 1. Measure <X>
-        prepareState(q);
-        H(q);
-        let mx = M(q);
-        Reset(q);
-        let s1 = (mx == Zero ? 1.0 | -1.0);
+            // Measure Y
+            prepareState(q);
+            Adjoint S(q);
+            H(q);
+            if (M(q) == Zero) { set countY += 1; }
+            Reset(q);
 
-        // 2. Measure <Y>
-        prepareState(q);
-        Adjoint S(q);
-        H(q);
-        let my = M(q);
-        Reset(q);
-        let s2 = (my == Zero ? 1.0 | -1.0);
+            // Measure Z
+            prepareState(q);
+            if (M(q) == Zero) { set countZ += 1; }
+            Reset(q);
+        }
 
-        // 3. Measure <Z>
-        prepareState(q);
-        let mz = M(q);
-        Reset(q);
-        let s3 = (mz == Zero ? 1.0 | -1.0);
-
-        // Purity gamma = (1 + S1^2 + S2^2 + S3^2) / 2
+        let s1 = 2.0 * (IntAsDouble(countX) / IntAsDouble(shots)) - 1.0;
+        let s2 = 2.0 * (IntAsDouble(countY) / IntAsDouble(shots)) - 1.0;
+        let s3 = 2.0 * (IntAsDouble(countZ) / IntAsDouble(shots)) - 1.0;
         let purity = (1.0 + s1 * s1 + s2 * s2 + s3 * s3) * 0.5;
 
         return StokesParameters(s1, s2, s3, purity);

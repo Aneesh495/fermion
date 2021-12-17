@@ -5,47 +5,49 @@ namespace Fermion.ErrorCorrection {
     open Std.Arrays;
     open Fermion.Core;
 
-    // Returns the 6 stabilizer checks for the [[7, 1, 3]] Steane code
-    // 3 X-type stabilizers and 3 Z-type stabilizers
+    // Returns the 6 stabilizer checks for the canonical [[7, 1, 3]] Steane code
+    // Check 0: bits with binary digit 1 in position 0 -> qubits 0, 2, 4, 6
+    // Check 1: bits with binary digit 1 in position 1 -> qubits 1, 2, 5, 6
+    // Check 2: bits with binary digit 1 in position 2 -> qubits 3, 4, 5, 6
     function GetSteaneStabilizerChecks() : StabilizerCheck[] {
         return [
-            // X checks (Hamming parity checks)
-            StabilizerCheck(PauliX, 4, [0, 1, 2, 3], 0),
-            StabilizerCheck(PauliX, 4, [1, 2, 4, 5], 1),
-            StabilizerCheck(PauliX, 4, [2, 3, 5, 6], 2),
-            // Z checks
-            StabilizerCheck(PauliZ, 4, [0, 1, 2, 3], 3),
-            StabilizerCheck(PauliZ, 4, [1, 2, 4, 5], 4),
-            StabilizerCheck(PauliZ, 4, [2, 3, 5, 6], 5)
+            // X-type checks (detect Z errors)
+            StabilizerCheck(PauliX, 4, [0, 2, 4, 6], 0),
+            StabilizerCheck(PauliX, 4, [1, 2, 5, 6], 1),
+            StabilizerCheck(PauliX, 4, [3, 4, 5, 6], 2),
+            // Z-type checks (detect X errors)
+            StabilizerCheck(PauliZ, 4, [0, 2, 4, 6], 3),
+            StabilizerCheck(PauliZ, 4, [1, 2, 5, 6], 4),
+            StabilizerCheck(PauliZ, 4, [3, 4, 5, 6], 5)
         ];
     }
 
-    // Encodes a single physical qubit (at index 0) and 6 auxiliary data qubits (initialized to |0>)
-    // into the logical [[7, 1, 3]] Steane code state
+    // Encodes 7 physical qubits into the logical [[7, 1, 3]] Steane code state
     operation EncodeSteaneCode(dataQubits : Qubit[]) : Unit {
-        // Verification of register size
         if (Length(dataQubits) < 7) {
             return ();
         }
 
-        // Steane encoding circuit using transversal Hadamard and CNOT gates
-        H(dataQubits[4]);
-        H(dataQubits[5]);
-        H(dataQubits[6]);
+        // Canonical CSS encoding circuit
+        H(dataQubits[0]);
+        H(dataQubits[1]);
+        H(dataQubits[3]);
 
-        CNOT(dataQubits[6], dataQubits[1]);
-        CNOT(dataQubits[6], dataQubits[2]);
-        CNOT(dataQubits[5], dataQubits[0]);
-        CNOT(dataQubits[5], dataQubits[2]);
-        CNOT(dataQubits[4], dataQubits[0]);
-        CNOT(dataQubits[4], dataQubits[1]);
+        CNOT(dataQubits[0], dataQubits[2]);
+        CNOT(dataQubits[1], dataQubits[2]);
 
-        CNOT(dataQubits[0], dataQubits[3]);
-        CNOT(dataQubits[1], dataQubits[3]);
-        CNOT(dataQubits[2], dataQubits[3]);
+        CNOT(dataQubits[0], dataQubits[4]);
+        CNOT(dataQubits[3], dataQubits[4]);
+
+        CNOT(dataQubits[1], dataQubits[5]);
+        CNOT(dataQubits[3], dataQubits[5]);
+
+        CNOT(dataQubits[0], dataQubits[6]);
+        CNOT(dataQubits[1], dataQubits[6]);
+        CNOT(dataQubits[3], dataQubits[6]);
     }
 
-    // Maps a 3-bit syndrome vector (s0, s1, s2) to the failing qubit index (0 to 6)
+    // Maps a 3-bit syndrome vector (s0, s1, s2) directly to the failing qubit index (0 to 6)
     // Returns -1 if no error is detected (all syndromes false)
     function SteaneSyndromeToErrorLocation(s0 : Bool, s1 : Bool, s2 : Bool) : Int {
         let b0 = s0 ? 1 | 0;
@@ -53,15 +55,10 @@ namespace Fermion.ErrorCorrection {
         let b2 = s2 ? 4 | 0;
         let val = b0 + b1 + b2;
 
-        if (val == 0) { return -1; }
-        if (val == 1) { return 0; } // S0 only: qubit 0
-        if (val == 2) { return 4; } // S1 only: qubit 4
-        if (val == 3) { return 1; } // S0 and S1: qubit 1
-        if (val == 4) { return 6; } // S2 only: qubit 6
-        if (val == 5) { return 3; } // S0 and S2: qubit 3
-        if (val == 6) { return 5; } // S1 and S2: qubit 5
-        if (val == 7) { return 2; } // S0, S1, and S2: qubit 2
-        return -1;
+        if (val == 0) {
+            return -1;
+        }
+        return val - 1;
     }
 
     // Runs a full syndrome measurement and active correction cycle on the Steane code register
